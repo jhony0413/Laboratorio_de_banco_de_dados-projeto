@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f97316">
+  <title>SGL | Acesso do vendedor</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <main class="page-shell">
+    <section class="form-panel" aria-label="Área de autenticação">
+      <div class="simple-brand" aria-label="SGL">SGL<span>.</span></div>
+
+      <div class="auth-card">
+        <div class="form-heading">
+          <p class="eyebrow" id="form-eyebrow">BEM-VINDO DE VOLTA</p>
+          <h2 id="form-title">Entrar na sua conta</h2>
+          <p class="form-subtitle" id="form-subtitle">Informe seus dados para acessar o painel.</p>
+        </div>
+
+        <div class="mode-switch" role="tablist" aria-label="Tipo de acesso">
+          <button class="mode-button is-active" id="tab-login" type="button" role="tab" aria-selected="true"
+            aria-controls="auth-form" data-mode="login">Entrar</button>
+          <button class="mode-button" id="tab-register" type="button" role="tab" aria-selected="false"
+            aria-controls="auth-form" data-mode="register">Criar conta</button>
+        </div>
+
+        <form id="auth-form" novalidate>
+          <!-- CAMPOS DE CADASTRO: aparecem somente no modo "Criar conta". -->
+          <div class="field-group register-only" hidden>
+            <label for="name">Nome completo</label>
+            <input id="name" name="name" type="text" autocomplete="name" maxlength="100"
+              placeholder="Ex.: Maria da Silva">
+            <small class="field-error" id="name-error"></small>
+          </div>
+
+          <div class="field-row register-only" hidden>
+            <div class="field-group">
+              <label for="cpf">CPF</label>
+              <input id="cpf" name="cpf" type="text" inputmode="numeric" autocomplete="off" maxlength="14"
+                placeholder="000.000.000-00">
+              <small class="field-error" id="cpf-error"></small>
+            </div>
+            <div class="field-group">
+              <label for="phone">Telefone <span class="optional">(opcional)</span></label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel" maxlength="15" placeholder="(00) 00000-0000">
+              <small class="field-error" id="phone-error"></small>
+            </div>
+          </div>
+
+          <div class="field-group register-only" hidden>
+            <label for="email">E-mail</label>
+            <input id="email" name="email" type="email" autocomplete="email" maxlength="120"
+              placeholder="voce@empresa.com">
+            <small class="field-error" id="email-error"></small>
+          </div>
+
+          <div class="field-group">
+            <label for="login">Login</label>
+            <input id="login" name="login" type="text" autocomplete="username" maxlength="50"
+              placeholder="Seu nome de usuário" required>
+            <small class="field-error" id="login-error"></small>
+          </div>
+
+          <div class="field-group">
+            <div class="label-line">
+              <label for="password">Senha</label>
+              <button class="text-button" id="toggle-password" type="button" aria-controls="password"
+                aria-pressed="false">Mostrar</button>
+            </div>
+            <input id="password" name="password" type="password" autocomplete="current-password" required
+              placeholder="Digite sua senha">
+            <small class="field-error" id="password-error"></small>
+          </div>
+
+          <div class="field-group register-only" hidden>
+            <label for="confirm-password">Confirmar senha</label>
+            <input id="confirm-password" name="confirm-password" type="password" autocomplete="new-password"
+              placeholder="Digite a senha novamente">
+            <small class="field-error" id="confirm-password-error"></small>
+          </div>
+
+          <button class="submit-button" id="submit-button" type="submit">
+            <span id="submit-label">Entrar</span>
+            <span class="button-arrow" aria-hidden="true">→</span>
+          </button>
+        </form>
+
+      </div>
+    </section>
+  </main>
+</body>
+
+</html>
