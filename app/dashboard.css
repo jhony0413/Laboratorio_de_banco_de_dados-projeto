@@ -532,9 +532,18 @@ h1 {
 
 .order-item-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: 12px;
-  margin-bottom: 10px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.order-item-row .action-btn.delete {
+  height: 41px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .add-item-btn {

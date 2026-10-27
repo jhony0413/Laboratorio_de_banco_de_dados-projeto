@@ -272,43 +272,196 @@ CREATE TABLE historico_status_pedido (
 CREATE TABLE pagamento (
     id_pagamento INT AUTO_INCREMENT,
     id_pedido INT NOT NULL,
-    forma_pagamento VARCHAR(30) NOT NULL, -- RN25
+    forma_pagamento VARCHAR(30) NOT NULL,
     data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    valor DECIMAL(10,2) NOT NULL,         -- RN24: > 0
-    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSANDO', -- RN26
-
+    valor DECIMAL(10 , 2 ) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSANDO',
     CONSTRAINT pk_pagamento PRIMARY KEY (id_pagamento),
-
-    CONSTRAINT fk_pagamento_pedido
-        FOREIGN KEY (id_pedido)
+    CONSTRAINT fk_pagamento_pedido FOREIGN KEY (id_pedido)
         REFERENCES pedido (id_pedido)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
+        ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT ck_pagamento_valor CHECK (valor > 0.00),
+    CONSTRAINT ck_pagamento_forma CHECK (forma_pagamento IN ('DINHEIRO' , 'CARTAO_CREDITO',
+        'CARTAO_DEBITO',
+        'PIX',
+        'BOLETO')),
+    CONSTRAINT ck_pagamento_status CHECK (status IN ('PROCESSANDO' , 'APROVADO', 'RECUSADO', 'ESTORNADO'))
+)  ENGINE=INNODB;
 
-    CONSTRAINT ck_pagamento_forma
-        CHECK (forma_pagamento IN (
-            'DINHEIRO',
-            'CARTAO_CREDITO',
-            'CARTAO_DEBITO',
-            'PIX',
-            'BOLETO'
-        )),
+-- VIEW (B1 e B5)
 
-    CONSTRAINT ck_pagamento_status
-        CHECK (status IN (
-            'PROCESSANDO',
-            'APROVADO',
-            'RECUSADO',
-            'ESTORNADO'
-        ))
+CREATE OR REPLACE VIEW vw_relatorio_consolidado AS
+SELECT 
+    p.id_pedido,
+    p.id_vendedor,
+    p.data_emissao,
+    p.valor_total,
+    c.id_pessoa AS id_cliente,
+    pes_cliente.nome AS cliente_nome,
+    pes_cliente.cpf AS cliente_cpf,
+    (SELECT h.status FROM historico_status_pedido h WHERE h.id_pedido = p.id_pedido ORDER BY h.data_alteracao DESC LIMIT 1) AS status_atual
+FROM pedido p
+JOIN cliente c ON p.id_cliente = c.id_pessoa AND p.id_vendedor = c.id_vendedor
+JOIN pessoa pes_cliente ON c.id_pessoa = pes_cliente.id_pessoa;
+
+-- EXPLAIN e INDEX 1 (B4)
+
+EXPLAIN
+SELECT c.id_pessoa AS id_clientepessoa, p_pes.nome AS cliente_nome, 
+       COUNT(ped.id_pedido) AS total_pedidos, 
+       SUM(ped.valor_total) AS valor_gasto_total
+FROM cliente c
+JOIN pessoa p_pes ON c.id_pessoa = p_pes.id_pessoa
+JOIN pedido ped ON c.id_pessoa = ped.id_cliente
+WHERE ped.id_vendedor = 1
+GROUP BY c.id_pessoa, p_pes.nome;
+
+CREATE INDEX idx_pedido_vendedor_cliente ON pedido(id_vendedor, id_cliente);
+
+-- EXPLAIN e INDEX 2 (B4)
+
+EXPLAIN
+SELECT pr.id_produto, pr.nome AS produto_nome, 
+       SUM(ip.quantidade) AS qtd_total_vendida,
+       SUM(ip.subtotal) AS receita_total
+FROM produto pr
+JOIN item_pedido ip ON pr.id_produto = ip.id_produto
+WHERE pr.id_vendedor = 1
+GROUP BY pr.id_produto, pr.nome;
+
+CREATE INDEX idx_item_pedido_produto ON item_pedido(id_produto);
+
+-- EXPLAIN e INDEX 3 (B4)
+
+EXPLAIN
+SELECT p.*, pes.nome AS cliente_nome,
+       (SELECT h.status FROM historico_status_pedido h WHERE h.id_pedido = p.id_pedido ORDER BY h.data_alteracao DESC LIMIT 1) AS status_atual
+FROM pedido p
+JOIN cliente c ON p.id_cliente = c.id_pessoa
+JOIN pessoa pes ON c.id_pessoa = pes.id_pessoa
+WHERE p.id_vendedor = 1;
+
+CREATE INDEX idx_historico_pedido_data ON historico_status_pedido(id_pedido, data_alteracao DESC);
+
+-- DCL (B5)
+
+-- 1. CRIAÇÃO DOS ROLES / PERFIS
+CREATE ROLE IF NOT EXISTS 'sgl_admin';
+CREATE ROLE IF NOT EXISTS 'sgl_vendedor';
+CREATE ROLE IF NOT EXISTS 'sgl_auditor';
+
+-- 2. ATRIBUIÇÃO DE PRIVILÉGIOS PARA O PERFIL ADMINISTRADOR
+GRANT ALL PRIVILEGES ON sgl_db.* TO 'sgl_admin';
+
+-- 3. ATRIBUIÇÃO DE PRIVILÉGIOS PARA O PERFIL VENDEDOR (Princípio do Menor Privilégio)
+GRANT SELECT, INSERT, UPDATE ON sgl_db.pessoa TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE ON sgl_db.cliente TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE ON sgl_db.vendedor TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE ON sgl_db.categoria TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE ON sgl_db.produto TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.fornecedor TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.fornecedor_produto TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.pedido TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.item_pedido TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.historico_status_pedido TO 'sgl_vendedor';
+GRANT SELECT, INSERT, UPDATE, DELETE ON sgl_db.pagamento TO 'sgl_vendedor';
+GRANT SELECT ON sgl_db.vw_relatorio_consolidado TO 'sgl_vendedor';
+
+-- 4. ATRIBUIÇÃO DE PRIVILÉGIOS PARA O PERFIL AUDITOR (Apenas Leitura)
+GRANT SELECT ON sgl_db.vw_relatorio_consolidado TO 'sgl_auditor';
+GRANT SELECT ON sgl_db.produto TO 'sgl_auditor';
+GRANT SELECT ON sgl_db.categoria TO 'sgl_auditor';
+GRANT SELECT ON sgl_db.historico_status_pedido TO 'sgl_auditor';
+
+-- 5. CRIAÇÃO DOS USUÁRIOS E ATRIBUIÇÃO DOS ROLES
+CREATE USER IF NOT EXISTS 'user_admin'@'localhost' IDENTIFIED BY 'AdminPass123!';
+CREATE USER IF NOT EXISTS 'user_app'@'localhost' IDENTIFIED BY 'AppServerPass456!';
+CREATE USER IF NOT EXISTS 'user_auditor'@'localhost' IDENTIFIED BY 'AuditorPass789!';
+
+GRANT 'sgl_admin' TO 'user_admin'@'localhost';
+GRANT 'sgl_vendedor' TO 'user_app'@'localhost';
+GRANT 'sgl_auditor' TO 'user_auditor'@'localhost';
+
+-- Definir roles ativas por padrão no login
+SET DEFAULT ROLE 'sgl_admin' TO 'user_admin'@'localhost';
+SET DEFAULT ROLE 'sgl_vendedor' TO 'user_app'@'localhost';
+SET DEFAULT ROLE 'sgl_auditor' TO 'user_auditor'@'localhost';
+
+FLUSH PRIVILEGES;
+
+-- Tabela centralizadora de auditoria do sistema (B6)
+CREATE TABLE IF NOT EXISTS auditoria_sistema (
+    id_auditoria INT AUTO_INCREMENT PRIMARY KEY,
+    tabela_afetada VARCHAR(50) NOT NULL,
+    id_registro INT NOT NULL,
+    operacao VARCHAR(20) NOT NULL,          -- Ex: 'UPDATE_PRECO', 'UPDATE_STATUS'
+    id_vendedor INT NULL,                   -- Operador responsável pela alteração
+    valor_antigo TEXT NULL,                 -- Estado dos dados antes da modificação
+    valor_novo TEXT NULL,                   -- Estado dos dados após a modificação
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ÍNDICES PARA CONSULTAS PRINCIPAIS (C3) *REVISAR*
+-- GATILHO 1 (B6)
+DELIMITER //
 
-CREATE INDEX idx_pessoa_nome ON pessoa(nome);
-CREATE INDEX idx_produto_preco ON produto(preco_unitario);
-CREATE INDEX idx_produto_estoque ON produto(estoque);
-CREATE INDEX idx_pedido_data ON pedido(data_emissao);
-CREATE INDEX idx_historico_status ON historico_status_pedido(status);
+CREATE TRIGGER trg_auditoria_preco_produto
+BEFORE UPDATE ON produto
+FOR EACH ROW
+BEGIN
+    -- Verifica se houve alteração efetiva no preço unitário
+    IF OLD.preco_unitario <> NEW.preco_unitario THEN
+        INSERT INTO auditoria_sistema (
+            tabela_afetada, 
+            id_registro, 
+            operacao, 
+            id_vendedor, 
+            valor_antigo, 
+            valor_novo
+        ) 
+        VALUES (
+            'produto',
+            OLD.id_produto,
+            'UPDATE_PRECO',
+            NEW.id_vendedor,
+            CONCAT('Preço Anterior: R$ ', OLD.preco_unitario),
+            CONCAT('Novo Preço: R$ ', NEW.preco_unitario)
+        );
+    END IF;
+END//
+
+DELIMITER ;
+
+-- GATILHO 2 (B6)
+DELIMITER //
+
+CREATE TRIGGER trg_auditoria_status_pedido
+AFTER INSERT ON historico_status_pedido
+FOR EACH ROW
+BEGIN
+    DECLARE v_id_vendedor INT;
+
+    -- Recupera o id_vendedor associado ao pedido em questão
+    SELECT id_vendedor INTO v_id_vendedor 
+    FROM pedido 
+    WHERE id_pedido = NEW.id_pedido;
+
+    -- Insere o registro na tabela de auditoria central
+    INSERT INTO auditoria_sistema (
+        tabela_afetada, 
+        id_registro, 
+        operacao, 
+        id_vendedor, 
+        valor_antigo, 
+        valor_novo
+    ) 
+    VALUES (
+        'pedido',
+        NEW.id_pedido,
+        'MUDANCA_STATUS',
+        v_id_vendedor,
+        'Status Anterior (Ver historico_status_pedido)',
+        CONCAT('Novo Status: ', NEW.status)
+    );
+END//
+
+DELIMITER ;
